@@ -1,0 +1,335 @@
+Got it! We'll implement a token-based approach where each token is a Java class, and tokens themselves handle expression evaluation and statement execution.  
+
+---
+
+## **Step 1: Define Token Types**
+We'll define different token types like numbers, operators, identifiers, and keywords.
+
+```java
+enum TokenType {
+    NUMBER, IDENTIFIER, OPERATOR, KEYWORD, EOF
+}
+```
+
+---
+
+## **Step 2: Define Token Classes**  
+Each token will be a Java class with an `evaluate()` method.  
+
+### **Base Token Class**
+```java
+abstract class Token {
+    abstract Object evaluate();
+}
+```
+
+### **Number Token**
+```java
+class NumberToken extends Token {
+    double value;
+
+    NumberToken(double value) {
+        this.value = value;
+    }
+
+    @Override
+    Object evaluate() {
+        return value;
+    }
+}
+```
+
+### **Variable Token (Handles Assignments & Lookups)**
+```java
+class VariableToken extends Token {
+    String name;
+    static java.util.Map<String, Object> memory = new java.util.HashMap<>();
+
+    VariableToken(String name) {
+        this.name = name;
+    }
+
+    @Override
+    Object evaluate() {
+        if (!memory.containsKey(name)) {
+            throw new RuntimeException("Undefined variable: " + name);
+        }
+        return memory.get(name);
+    }
+}
+```
+
+### **Assignment Token (`x = expr`)**
+```java
+class AssignmentToken extends Token {
+    VariableToken variable;
+    Token expression;
+
+    AssignmentToken(VariableToken variable, Token expression) {
+        this.variable = variable;
+        this.expression = expression;
+    }
+
+    @Override
+    Object evaluate() {
+        Object result = expression.evaluate();
+        VariableToken.memory.put(variable.name, result);
+        return result;
+    }
+}
+```
+
+### **Binary Operator Token (`+, -, *, /, &&, ||`)**
+```java
+class BinaryOperatorToken extends Token {
+    Token left, right;
+    String operator;
+
+    BinaryOperatorToken(Token left, String operator, Token right) {
+        this.left = left;
+        this.operator = operator;
+        this.right = right;
+    }
+
+    @Override
+    Object evaluate() {
+        Object leftVal = left.evaluate();
+        Object rightVal = right.evaluate();
+
+        switch (operator) {
+            case "+": return (double) leftVal + (double) rightVal;
+            case "-": return (double) leftVal - (double) rightVal;
+            case "*": return (double) leftVal * (double) rightVal;
+            case "/": return (double) leftVal / (double) rightVal;
+            case "&&": return (boolean) leftVal && (boolean) rightVal;
+            case "||": return (boolean) leftVal || (boolean) rightVal;
+            default: throw new RuntimeException("Invalid operator: " + operator);
+        }
+    }
+}
+```
+
+### **If Token (`if (condition) statement else statement`)**
+```java
+class IfToken extends Token {
+    Token condition, thenBranch, elseBranch;
+
+    IfToken(Token condition, Token thenBranch, Token elseBranch) {
+        this.condition = condition;
+        this.thenBranch = thenBranch;
+        this.elseBranch = elseBranch;
+    }
+
+    @Override
+    Object evaluate() {
+        boolean cond = (boolean) condition.evaluate();
+        return cond ? thenBranch.evaluate() : (elseBranch != null ? elseBranch.evaluate() : null);
+    }
+}
+```
+
+### **While Token (`while (condition) statement`)**
+```java
+class WhileToken extends Token {
+    Token condition, body;
+
+    WhileToken(Token condition, Token body) {
+        this.condition = condition;
+        this.body = body;
+    }
+
+    @Override
+    Object evaluate() {
+        Object result = null;
+        while ((boolean) condition.evaluate()) {
+            result = body.evaluate();
+        }
+        return result;
+    }
+}
+```
+
+---
+
+## **Step 3: Implement Lexer**
+We'll tokenize input expressions.
+
+```java
+class Lexer {
+    private String input;
+    private int position = 0;
+
+    Lexer(String input) {
+        this.input = input;
+    }
+
+    private char peek() {
+        return position < input.length() ? input.charAt(position) : '\0';
+    }
+
+    private char consume() {
+        return input.charAt(position++);
+    }
+
+    Token nextToken() {
+        while (position < input.length() && Character.isWhitespace(peek())) position++;
+
+        if (position >= input.length()) return new EOFToken();
+
+        char current = peek();
+
+        if (Character.isDigit(current)) {
+            StringBuilder num = new StringBuilder();
+            while (Character.isDigit(peek())) num.append(consume());
+            return new NumberToken(Double.parseDouble(num.toString()));
+        }
+
+        if (Character.isLetter(current)) {
+            StringBuilder ident = new StringBuilder();
+            while (Character.isLetterOrDigit(peek())) ident.append(consume());
+
+            String value = ident.toString();
+            if (value.equals("if") || value.equals("else") || value.equals("while")) {
+                return new KeywordToken(value);
+            }
+            return new VariableToken(value);
+        }
+
+        if ("+-*/=(){}<>!&|".indexOf(current) >= 0) {
+            return new OperatorToken(String.valueOf(consume()));
+        }
+
+        throw new RuntimeException("Unexpected character: " + current);
+    }
+}
+
+// EOF Token (end of file)
+class EOFToken extends Token {
+    @Override
+    Object evaluate() {
+        return null;
+    }
+}
+```
+
+---
+
+## **Step 4: Implement Parser**
+The parser builds expressions using tokens.
+
+```java
+class Parser {
+    private Lexer lexer;
+    private Token currentToken;
+
+    Parser(Lexer lexer) {
+        this.lexer = lexer;
+        this.currentToken = lexer.nextToken();
+    }
+
+    private void consume(Class<?> expectedClass) {
+        if (expectedClass.isInstance(currentToken)) {
+            currentToken = lexer.nextToken();
+        } else {
+            throw new RuntimeException("Unexpected token: " + currentToken);
+        }
+    }
+
+    Token parse() {
+        return statement();
+    }
+
+    private Token statement() {
+        if (currentToken instanceof VariableToken varToken) {
+            consume(OperatorToken.class); // Expect '='
+            return new AssignmentToken(varToken, expression());
+        } else if (currentToken instanceof KeywordToken keywordToken) {
+            if (keywordToken.value.equals("if")) return ifStatement();
+            if (keywordToken.value.equals("while")) return whileStatement();
+        }
+        return expression();
+    }
+
+    private Token expression() {
+        Token left = term();
+        while (currentToken instanceof OperatorToken opToken &&
+                ("+".equals(opToken.value) || "-".equals(opToken.value))) {
+            consume(OperatorToken.class);
+            left = new BinaryOperatorToken(left, opToken.value, term());
+        }
+        return left;
+    }
+
+    private Token term() {
+        Token left = factor();
+        while (currentToken instanceof OperatorToken opToken &&
+                ("*".equals(opToken.value) || "/".equals(opToken.value))) {
+            consume(OperatorToken.class);
+            left = new BinaryOperatorToken(left, opToken.value, factor());
+        }
+        return left;
+    }
+
+    private Token factor() {
+        if (currentToken instanceof NumberToken numToken) {
+            consume(NumberToken.class);
+            return numToken;
+        } else if (currentToken instanceof VariableToken varToken) {
+            consume(VariableToken.class);
+            return varToken;
+        }
+        throw new RuntimeException("Unexpected token: " + currentToken);
+    }
+
+    private Token ifStatement() {
+        consume(KeywordToken.class); // Consume "if"
+        consume(OperatorToken.class); // Consume "("
+        Token condition = expression();
+        consume(OperatorToken.class); // Consume ")"
+        Token thenBranch = statement();
+        Token elseBranch = null;
+
+        if (currentToken instanceof KeywordToken keywordToken && keywordToken.value.equals("else")) {
+            consume(KeywordToken.class);
+            elseBranch = statement();
+        }
+
+        return new IfToken(condition, thenBranch, elseBranch);
+    }
+
+    private Token whileStatement() {
+        consume(KeywordToken.class); // Consume "while"
+        consume(OperatorToken.class); // Consume "("
+        Token condition = expression();
+        consume(OperatorToken.class); // Consume ")"
+        Token body = statement();
+        return new WhileToken(condition, body);
+    }
+}
+```
+
+---
+
+## **Step 5: Run the Parser**
+```java
+public class Main {
+    public static void main(String[] args) {
+        String input = "x = 5; while (x < 10) x = x + 1; x;";
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Token result = parser.parse();
+        System.out.println("Final value of x: " + result.evaluate());
+    }
+}
+```
+
+---
+
+## **Expected Output**
+```
+Final value of x: 10
+```
+
+---
+
+Let me know if you want to add **function calls or logical operators (`&&`, `||`)** next!

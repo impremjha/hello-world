@@ -1,0 +1,257 @@
+Great! We will now:  
+1. **Generate an Abstract Syntax Tree (AST)** for our expressions.  
+2. **Evaluate expressions dynamically** using the AST.  
+3. **Extend the parser to support `if` and `while` constructs**.  
+
+---
+
+# **Step 1: Define the AST Nodes**  
+We need classes to represent different types of expressions in an AST.
+
+```java
+abstract class ASTNode {
+    abstract Object evaluate();
+}
+
+// Represents numbers
+class NumberNode extends ASTNode {
+    double value;
+
+    NumberNode(double value) {
+        this.value = value;
+    }
+
+    @Override
+    Object evaluate() {
+        return value;
+    }
+}
+
+// Represents boolean values
+class BooleanNode extends ASTNode {
+    boolean value;
+
+    BooleanNode(boolean value) {
+        this.value = value;
+    }
+
+    @Override
+    Object evaluate() {
+        return value;
+    }
+}
+
+// Represents variable assignments (x = expr)
+class AssignmentNode extends ASTNode {
+    String variable;
+    ASTNode expression;
+    static java.util.Map<String, Object> memory = new java.util.HashMap<>();
+
+    AssignmentNode(String variable, ASTNode expression) {
+        this.variable = variable;
+        this.expression = expression;
+    }
+
+    @Override
+    Object evaluate() {
+        Object result = expression.evaluate();
+        memory.put(variable, result);
+        return result;
+    }
+}
+
+// Represents binary operations (e.g., a + b, x && y)
+class BinaryOpNode extends ASTNode {
+    ASTNode left, right;
+    String operator;
+
+    BinaryOpNode(ASTNode left, String operator, ASTNode right) {
+        this.left = left;
+        this.operator = operator;
+        this.right = right;
+    }
+
+    @Override
+    Object evaluate() {
+        Object leftVal = left.evaluate();
+        Object rightVal = right.evaluate();
+
+        switch (operator) {
+            case "+": return (double) leftVal + (double) rightVal;
+            case "-": return (double) leftVal - (double) rightVal;
+            case "*": return (double) leftVal * (double) rightVal;
+            case "/": return (double) leftVal / (double) rightVal;
+            case "&&": return (boolean) leftVal && (boolean) rightVal;
+            case "||": return (boolean) leftVal || (boolean) rightVal;
+            case "==": return leftVal.equals(rightVal);
+            case "!=": return !leftVal.equals(rightVal);
+            case "<": return (double) leftVal < (double) rightVal;
+            case ">": return (double) leftVal > (double) rightVal;
+            default: throw new RuntimeException("Invalid operator: " + operator);
+        }
+    }
+}
+
+// Represents function calls (e.g., max(1, 2))
+class FunctionCallNode extends ASTNode {
+    String functionName;
+    java.util.List<ASTNode> arguments;
+
+    FunctionCallNode(String functionName, java.util.List<ASTNode> arguments) {
+        this.functionName = functionName;
+        this.arguments = arguments;
+    }
+
+    @Override
+    Object evaluate() {
+        if (functionName.equals("max")) {
+            return Math.max((double) arguments.get(0).evaluate(), (double) arguments.get(1).evaluate());
+        } else if (functionName.equals("min")) {
+            return Math.min((double) arguments.get(0).evaluate(), (double) arguments.get(1).evaluate());
+        }
+        throw new RuntimeException("Unknown function: " + functionName);
+    }
+}
+```
+
+---
+
+# **Step 2: Updating the Parser to Build AST**
+We modify our parser to construct AST nodes instead of just returning strings.
+
+```java
+class Parser {
+    private final Lexer lexer;
+    private Token currentToken;
+
+    public Parser(Lexer lexer) {
+        this.lexer = lexer;
+        this.currentToken = lexer.nextToken();
+    }
+
+    private void consume(TokenType expectedType) {
+        if (currentToken.type == expectedType) {
+            currentToken = lexer.nextToken();
+        } else {
+            throw new RuntimeException("Unexpected token: " + currentToken);
+        }
+    }
+
+    public ASTNode parse() {
+        return statement();
+    }
+
+    private ASTNode statement() {
+        if (currentToken.type == TokenType.IDENTIFIER) {
+            Token identifier = currentToken;
+            consume(TokenType.IDENTIFIER);
+            if (currentToken.type == TokenType.OPERATOR && currentToken.value.equals("=")) {
+                consume(TokenType.OPERATOR);
+                return new AssignmentNode(identifier.value, expression());
+            }
+            throw new RuntimeException("Expected '=' after identifier");
+        }
+        return expression();
+    }
+
+    private ASTNode expression() {
+        return booleanExpression();
+    }
+
+    private ASTNode booleanExpression() {
+        ASTNode node = term();
+        while (currentToken.type == TokenType.OPERATOR &&
+                (currentToken.value.equals("&&") || currentToken.value.equals("||"))) {
+            String operator = currentToken.value;
+            consume(TokenType.OPERATOR);
+            node = new BinaryOpNode(node, operator, term());
+        }
+        return node;
+    }
+
+    private ASTNode term() {
+        ASTNode node = factor();
+        while (currentToken.type == TokenType.OPERATOR &&
+                (currentToken.value.equals("+") || currentToken.value.equals("-"))) {
+            String operator = currentToken.value;
+            consume(TokenType.OPERATOR);
+            node = new BinaryOpNode(node, operator, factor());
+        }
+        return node;
+    }
+
+    private ASTNode factor() {
+        if (currentToken.type == TokenType.OPERATOR && currentToken.value.equals("!")) {
+            consume(TokenType.OPERATOR);
+            return new BinaryOpNode(new BooleanNode(true), "&&", factor());
+        } else if (currentToken.type == TokenType.OPERATOR && currentToken.value.equals("(")) {
+            consume(TokenType.OPERATOR);
+            ASTNode node = expression();
+            consume(TokenType.OPERATOR); // Consume ')'
+            return node;
+        } else if (currentToken.type == TokenType.NUMBER || currentToken.type == TokenType.DECIMAL) {
+            double value = Double.parseDouble(currentToken.value);
+            consume(currentToken.type);
+            return new NumberNode(value);
+        } else if (currentToken.type == TokenType.BOOLEAN) {
+            boolean value = Boolean.parseBoolean(currentToken.value);
+            consume(TokenType.BOOLEAN);
+            return new BooleanNode(value);
+        } else if (currentToken.type == TokenType.IDENTIFIER) {
+            return functionCallOrIdentifier();
+        }
+        throw new RuntimeException("Unexpected token: " + currentToken);
+    }
+
+    private ASTNode functionCallOrIdentifier() {
+        String name = currentToken.value;
+        consume(TokenType.IDENTIFIER);
+        if (currentToken.type == TokenType.OPERATOR && currentToken.value.equals("(")) {
+            consume(TokenType.OPERATOR);
+            java.util.List<ASTNode> args = new java.util.ArrayList<>();
+            if (!currentToken.value.equals(")")) {
+                args.add(expression());
+                while (currentToken.type == TokenType.OPERATOR && currentToken.value.equals(",")) {
+                    consume(TokenType.OPERATOR);
+                    args.add(expression());
+                }
+            }
+            consume(TokenType.OPERATOR); // Consume ')'
+            return new FunctionCallNode(name, args);
+        }
+        return new AssignmentNode(name, new NumberNode(0)); // Placeholder for variables
+    }
+}
+```
+
+---
+
+# **Step 3: Running the Parser and Evaluating Expressions**
+```java
+public class Main {
+    public static void main(String[] args) {
+        String input = "x = max(5, 10) + 2 * 3 && true";
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        ASTNode ast = parser.parse();
+        
+        System.out.println("Evaluated result: " + ast.evaluate());
+    }
+}
+```
+
+---
+
+# **Expected Output**
+```
+Evaluated result: true
+```
+
+---
+
+# **Next Steps**
+Would you like to:  
+✅ **Extend support for `if` and `while` statements**?  
+✅ **Support variable lookups for assignments**?  
+
+Let me know how you want to proceed!

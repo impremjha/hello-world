@@ -1,0 +1,182 @@
+Let's enhance the parser to:  
+1. **Support variable lookups for assignments** so that assigned values can be retrieved.  
+2. **Extend support for `if` and `while` statements** to enable conditional and looping constructs.  
+
+---
+
+## **Step 1: Enhancing Variable Lookup**
+We'll update the `AssignmentNode` class to allow retrieving previously assigned values.
+
+```java
+class AssignmentNode extends ASTNode {
+    String variable;
+    ASTNode expression;
+    static java.util.Map<String, Object> memory = new java.util.HashMap<>();
+
+    AssignmentNode(String variable, ASTNode expression) {
+        this.variable = variable;
+        this.expression = expression;
+    }
+
+    @Override
+    Object evaluate() {
+        Object result = expression.evaluate();
+        memory.put(variable, result);
+        return result;
+    }
+}
+
+// New class for Variable Lookup
+class VariableNode extends ASTNode {
+    String variable;
+
+    VariableNode(String variable) {
+        this.variable = variable;
+    }
+
+    @Override
+    Object evaluate() {
+        if (!AssignmentNode.memory.containsKey(variable)) {
+            throw new RuntimeException("Undefined variable: " + variable);
+        }
+        return AssignmentNode.memory.get(variable);
+    }
+}
+```
+
+---
+
+## **Step 2: Adding `if` and `while` Statements**
+We introduce new AST nodes for conditional and loop handling.
+
+```java
+// If-Else Statement Node
+class IfNode extends ASTNode {
+    ASTNode condition;
+    ASTNode thenBranch;
+    ASTNode elseBranch;
+
+    IfNode(ASTNode condition, ASTNode thenBranch, ASTNode elseBranch) {
+        this.condition = condition;
+        this.thenBranch = thenBranch;
+        this.elseBranch = elseBranch;
+    }
+
+    @Override
+    Object evaluate() {
+        boolean cond = (boolean) condition.evaluate();
+        return cond ? thenBranch.evaluate() : (elseBranch != null ? elseBranch.evaluate() : null);
+    }
+}
+
+// While Loop Node
+class WhileNode extends ASTNode {
+    ASTNode condition;
+    ASTNode body;
+
+    WhileNode(ASTNode condition, ASTNode body) {
+        this.condition = condition;
+        this.body = body;
+    }
+
+    @Override
+    Object evaluate() {
+        Object result = null;
+        while ((boolean) condition.evaluate()) {
+            result = body.evaluate();
+        }
+        return result;
+    }
+}
+```
+
+---
+
+## **Step 3: Extending the Parser**
+We'll update the parser to recognize `if` and `while` statements.
+
+```java
+private ASTNode statement() {
+    if (currentToken.type == TokenType.IDENTIFIER) {
+        Token identifier = currentToken;
+        consume(TokenType.IDENTIFIER);
+        if (currentToken.type == TokenType.OPERATOR && currentToken.value.equals("=")) {
+            consume(TokenType.OPERATOR);
+            return new AssignmentNode(identifier.value, expression());
+        }
+        return new VariableNode(identifier.value); // Variable lookup
+    } else if (currentToken.type == TokenType.KEYWORD) {
+        if (currentToken.value.equals("if")) {
+            return ifStatement();
+        } else if (currentToken.value.equals("while")) {
+            return whileStatement();
+        }
+    }
+    return expression();
+}
+
+private ASTNode ifStatement() {
+    consume(TokenType.KEYWORD); // Consume "if"
+    consume(TokenType.OPERATOR); // Consume "("
+    ASTNode condition = expression();
+    consume(TokenType.OPERATOR); // Consume ")"
+
+    ASTNode thenBranch = statement();
+    ASTNode elseBranch = null;
+
+    if (currentToken.type == TokenType.KEYWORD && currentToken.value.equals("else")) {
+        consume(TokenType.KEYWORD);
+        elseBranch = statement();
+    }
+
+    return new IfNode(condition, thenBranch, elseBranch);
+}
+
+private ASTNode whileStatement() {
+    consume(TokenType.KEYWORD); // Consume "while"
+    consume(TokenType.OPERATOR); // Consume "("
+    ASTNode condition = expression();
+    consume(TokenType.OPERATOR); // Consume ")"
+
+    ASTNode body = statement();
+    return new WhileNode(condition, body);
+}
+```
+
+---
+
+## **Step 4: Testing the Implementation**
+```java
+public class Main {
+    public static void main(String[] args) {
+        String input = """
+            x = 5;
+            if (x > 3) x = x + 2;
+            while (x < 10) x = x + 1;
+            x;
+        """;
+
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        ASTNode ast = parser.parse();
+        
+        System.out.println("Final value of x: " + ast.evaluate());
+    }
+}
+```
+
+---
+
+## **Expected Output**
+```
+Final value of x: 10
+```
+
+---
+
+## **Next Steps**
+Would you like to:
+✅ **Extend support for functions with multiple statements**?  
+✅ **Support break/continue in loops**?  
+
+Let me know how you'd like to proceed!

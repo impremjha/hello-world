@@ -1,182 +1,223 @@
-Let's enhance the parser to:  
-1. **Support variable lookups for assignments** so that assigned values can be retrieved.  
-2. **Extend support for `if` and `while` statements** to enable conditional and looping constructs.  
+Let's break this down into two parts:  
+
+1. **Lexer**: Tokenizes the input into meaningful elements (identifiers, numbers, strings, function names, brackets, etc.).  
+2. **Parser**: Identifies functions and their arguments, ensuring valid syntax.
 
 ---
 
-## **Step 1: Enhancing Variable Lookup**
-We'll update the `AssignmentNode` class to allow retrieving previously assigned values.
+### **Step 1: Define Token Types**
+We need to define tokens for:
+- **Function Names** (e.g., `Function1`, `Function2`)
+- **Identifiers** (e.g., `[var1.var1]`)
+- **Strings** (e.g., `'avg'`, `'value'`)
+- **Numbers** (e.g., `0`, `5.2`)
+- **Operators** (e.g., `=` in `Function2`)
+- **Brackets** (`(`, `)`, `,`)
+
+---
+
+### **Step 2: Implement the Lexer**
+The lexer reads characters and groups them into tokens.
 
 ```java
-class AssignmentNode extends ASTNode {
-    String variable;
-    ASTNode expression;
-    static java.util.Map<String, Object> memory = new java.util.HashMap<>();
+import java.util.*;
+import java.util.regex.*;
 
-    AssignmentNode(String variable, ASTNode expression) {
-        this.variable = variable;
-        this.expression = expression;
+class Token {
+    enum Type {
+        FUNCTION, IDENTIFIER, STRING, NUMBER, OPERATOR, LPAREN, RPAREN, COMMA, EQUAL, UNKNOWN
+    }
+
+    Type type;
+    String value;
+
+    Token(Type type, String value) {
+        this.type = type;
+        this.value = value;
     }
 
     @Override
-    Object evaluate() {
-        Object result = expression.evaluate();
-        memory.put(variable, result);
-        return result;
+    public String toString() {
+        return type + "('" + value + "')";
     }
 }
 
-// New class for Variable Lookup
-class VariableNode extends ASTNode {
-    String variable;
+class Lexer {
+    private static final Pattern TOKEN_PATTERNS = Pattern.compile(
+            "(?<FUNCTION>[A-Za-z][A-Za-z0-9_]*)" +      // Function names
+            "|(?<IDENTIFIER>\\[\\w+(\\.\\w+)*\\])" +    // Identifiers like [var1.var1]
+            "|(?<STRING>'[^']*')" +                     // Strings like 'avg'
+            "|(?<NUMBER>\\d+(\\.\\d+)?)" +              // Numbers (integers or decimals)
+            "|(?<EQUAL>=)" +                            // Equal sign
+            "|(?<COMMA>,)" +                            // Comma
+            "|(?<LPAREN>\\()" +                         // Left Parenthesis
+            "|(?<RPAREN>\\))"                           // Right Parenthesis
+    );
 
-    VariableNode(String variable) {
-        this.variable = variable;
+    private final Matcher matcher;
+    
+    Lexer(String input) {
+        matcher = TOKEN_PATTERNS.matcher(input);
     }
 
-    @Override
-    Object evaluate() {
-        if (!AssignmentNode.memory.containsKey(variable)) {
-            throw new RuntimeException("Undefined variable: " + variable);
+    List<Token> tokenize() {
+        List<Token> tokens = new ArrayList<>();
+        while (matcher.find()) {
+            if (matcher.group("FUNCTION") != null) tokens.add(new Token(Token.Type.FUNCTION, matcher.group()));
+            else if (matcher.group("IDENTIFIER") != null) tokens.add(new Token(Token.Type.IDENTIFIER, matcher.group()));
+            else if (matcher.group("STRING") != null) tokens.add(new Token(Token.Type.STRING, matcher.group()));
+            else if (matcher.group("NUMBER") != null) tokens.add(new Token(Token.Type.NUMBER, matcher.group()));
+            else if (matcher.group("EQUAL") != null) tokens.add(new Token(Token.Type.EQUAL, matcher.group()));
+            else if (matcher.group("COMMA") != null) tokens.add(new Token(Token.Type.COMMA, matcher.group()));
+            else if (matcher.group("LPAREN") != null) tokens.add(new Token(Token.Type.LPAREN, matcher.group()));
+            else if (matcher.group("RPAREN") != null) tokens.add(new Token(Token.Type.RPAREN, matcher.group()));
+            else tokens.add(new Token(Token.Type.UNKNOWN, matcher.group()));
         }
-        return AssignmentNode.memory.get(variable);
+        return tokens;
     }
 }
 ```
 
 ---
 
-## **Step 2: Adding `if` and `while` Statements**
-We introduce new AST nodes for conditional and loop handling.
+### **Step 3: Implement the Parser**
+The parser uses tokens to identify function calls and their arguments.
 
 ```java
-// If-Else Statement Node
-class IfNode extends ASTNode {
-    ASTNode condition;
-    ASTNode thenBranch;
-    ASTNode elseBranch;
+class Parser {
+    private final List<Token> tokens;
+    private int position = 0;
 
-    IfNode(ASTNode condition, ASTNode thenBranch, ASTNode elseBranch) {
-        this.condition = condition;
-        this.thenBranch = thenBranch;
-        this.elseBranch = elseBranch;
+    Parser(List<Token> tokens) {
+        this.tokens = tokens;
     }
 
-    @Override
-    Object evaluate() {
-        boolean cond = (boolean) condition.evaluate();
-        return cond ? thenBranch.evaluate() : (elseBranch != null ? elseBranch.evaluate() : null);
-    }
-}
-
-// While Loop Node
-class WhileNode extends ASTNode {
-    ASTNode condition;
-    ASTNode body;
-
-    WhileNode(ASTNode condition, ASTNode body) {
-        this.condition = condition;
-        this.body = body;
-    }
-
-    @Override
-    Object evaluate() {
-        Object result = null;
-        while ((boolean) condition.evaluate()) {
-            result = body.evaluate();
+    void parse() {
+        while (position < tokens.size()) {
+            parseFunction();
         }
-        return result;
+    }
+
+    private void parseFunction() {
+        if (match(Token.Type.FUNCTION)) {
+            Token functionName = previous();
+            System.out.println("Function: " + functionName.value);
+
+            if (match(Token.Type.LPAREN)) {
+                List<String> args = parseArguments();
+                System.out.println("Arguments: " + args);
+            } else {
+                throw new RuntimeException("Expected '(' after function name.");
+            }
+        } else {
+            throw new RuntimeException("Expected function name.");
+        }
+    }
+
+    private List<String> parseArguments() {
+        List<String> args = new ArrayList<>();
+        while (!match(Token.Type.RPAREN) && position < tokens.size()) {
+            if (match(Token.Type.IDENTIFIER, Token.Type.STRING, Token.Type.NUMBER)) {
+                args.add(previous().value);
+            } else if (match(Token.Type.EQUAL)) {
+                args.add("=");
+            } else if (match(Token.Type.COMMA)) {
+                // Skip commas
+            } else {
+                throw new RuntimeException("Unexpected token in arguments: " + peek().value);
+            }
+        }
+        return args;
+    }
+
+    private boolean match(Token.Type... types) {
+        if (position < tokens.size()) {
+            for (Token.Type type : types) {
+                if (tokens.get(position).type == type) {
+                    position++;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private Token previous() {
+        return tokens.get(position - 1);
+    }
+
+    private Token peek() {
+        return tokens.get(position);
     }
 }
 ```
 
 ---
 
-## **Step 3: Extending the Parser**
-We'll update the parser to recognize `if` and `while` statements.
-
-```java
-private ASTNode statement() {
-    if (currentToken.type == TokenType.IDENTIFIER) {
-        Token identifier = currentToken;
-        consume(TokenType.IDENTIFIER);
-        if (currentToken.type == TokenType.OPERATOR && currentToken.value.equals("=")) {
-            consume(TokenType.OPERATOR);
-            return new AssignmentNode(identifier.value, expression());
-        }
-        return new VariableNode(identifier.value); // Variable lookup
-    } else if (currentToken.type == TokenType.KEYWORD) {
-        if (currentToken.value.equals("if")) {
-            return ifStatement();
-        } else if (currentToken.value.equals("while")) {
-            return whileStatement();
-        }
-    }
-    return expression();
-}
-
-private ASTNode ifStatement() {
-    consume(TokenType.KEYWORD); // Consume "if"
-    consume(TokenType.OPERATOR); // Consume "("
-    ASTNode condition = expression();
-    consume(TokenType.OPERATOR); // Consume ")"
-
-    ASTNode thenBranch = statement();
-    ASTNode elseBranch = null;
-
-    if (currentToken.type == TokenType.KEYWORD && currentToken.value.equals("else")) {
-        consume(TokenType.KEYWORD);
-        elseBranch = statement();
-    }
-
-    return new IfNode(condition, thenBranch, elseBranch);
-}
-
-private ASTNode whileStatement() {
-    consume(TokenType.KEYWORD); // Consume "while"
-    consume(TokenType.OPERATOR); // Consume "("
-    ASTNode condition = expression();
-    consume(TokenType.OPERATOR); // Consume ")"
-
-    ASTNode body = statement();
-    return new WhileNode(condition, body);
-}
-```
-
----
-
-## **Step 4: Testing the Implementation**
+### **Step 4: Run the Parser**
 ```java
 public class Main {
     public static void main(String[] args) {
-        String input = """
-            x = 5;
-            if (x > 3) x = x + 2;
-            while (x < 10) x = x + 1;
-            x;
-        """;
+        String input = "Function1([var1.var1],[var2],'avg')\n"
+                     + "Function2([var1.var1],[var2] = 'value')\n"
+                     + "Function3([var1.var1],0)";
 
         Lexer lexer = new Lexer(input);
-        Parser parser = new Parser(lexer);
-        ASTNode ast = parser.parse();
+        List<Token> tokens = lexer.tokenize();
         
-        System.out.println("Final value of x: " + ast.evaluate());
+        System.out.println("Tokens:");
+        tokens.forEach(System.out::println);
+        
+        System.out.println("\nParsing...");
+        Parser parser = new Parser(tokens);
+        parser.parse();
     }
 }
 ```
 
 ---
 
-## **Expected Output**
+### **Output Example**
 ```
-Final value of x: 10
+Tokens:
+FUNCTION('Function1')
+LPAREN('(')
+IDENTIFIER('[var1.var1]')
+COMMA(',')
+IDENTIFIER('[var2]')
+COMMA(',')
+STRING('avg')
+RPAREN(')')
+FUNCTION('Function2')
+LPAREN('(')
+IDENTIFIER('[var1.var1]')
+COMMA(',')
+IDENTIFIER('[var2]')
+EQUAL('=')
+STRING('value')
+RPAREN(')')
+FUNCTION('Function3')
+LPAREN('(')
+IDENTIFIER('[var1.var1]')
+COMMA(',')
+NUMBER('0')
+RPAREN(')')
+
+Parsing...
+Function: Function1
+Arguments: [[var1.var1], [var2], 'avg']
+Function: Function2
+Arguments: [[var1.var1], [var2], =, 'value']
+Function: Function3
+Arguments: [[var1.var1], 0]
 ```
 
 ---
 
-## **Next Steps**
-Would you like to:
-✅ **Extend support for functions with multiple statements**?  
-✅ **Support break/continue in loops**?  
+### **How This Works**
+1. **Lexer**: Converts input into tokens.
+2. **Parser**: Reads tokens and identifies functions and arguments.
 
-Let me know how you'd like to proceed!
+This approach allows us to extend parsing to support additional syntax, operators, or nested expressions later.
+
+Would you like to add support for nested function calls or expressions within arguments?

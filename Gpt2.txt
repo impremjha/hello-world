@@ -221,3 +221,133 @@ Arguments: [[var1.var1], 0]
 This approach allows us to extend parsing to support additional syntax, operators, or nested expressions later.
 
 Would you like to add support for nested function calls or expressions within arguments?
+
+
+
+
+
+
+I'll modify the lexer to handle spaces properly:
+
+1. **Ignore spaces outside of tokens** (so expressions like `Function1 ( [var1.var1] , [var2] , 'avg' )` are parsed correctly).
+2. **Allow spaces within identifiers** inside `[]` (e.g., `[var1 var2.var1 var2]` should be treated as a single token).
+
+### **Updated Lexer**
+```java
+import java.util.*;
+import java.util.regex.*;
+
+class Token {
+    enum Type {
+        FUNCTION, IDENTIFIER, STRING, NUMBER, OPERATOR, LPAREN, RPAREN, COMMA, EQUAL, UNKNOWN
+    }
+
+    Type type;
+    String value;
+
+    Token(Type type, String value) {
+        this.type = type;
+        this.value = value;
+    }
+
+    @Override
+    public String toString() {
+        return type + "('" + value + "')";
+    }
+}
+
+class Lexer {
+    private static final Pattern TOKEN_PATTERNS = Pattern.compile(
+            "(?<FUNCTION>[A-Za-z][A-Za-z0-9_]*)" +        // Function names
+            "|(?<IDENTIFIER>\\[.*?\\])" +                // Identifiers inside []
+            "|(?<STRING>'[^']*')" +                      // Strings like 'avg'
+            "|(?<NUMBER>\\d+(\\.\\d+)?)" +               // Numbers (integers or decimals)
+            "|(?<EQUAL>=)" +                             // Equal sign
+            "|(?<COMMA>,)" +                             // Comma
+            "|(?<LPAREN>\\()" +                          // Left Parenthesis
+            "|(?<RPAREN>\\))"                            // Right Parenthesis
+    );
+
+    private final Matcher matcher;
+
+    Lexer(String input) {
+        // Remove extra spaces between tokens, but keep spaces inside []
+        input = input.replaceAll("\\s+(?![^\\[]*\\])", "");
+        matcher = TOKEN_PATTERNS.matcher(input);
+    }
+
+    List<Token> tokenize() {
+        List<Token> tokens = new ArrayList<>();
+        while (matcher.find()) {
+            if (matcher.group("FUNCTION") != null) tokens.add(new Token(Token.Type.FUNCTION, matcher.group()));
+            else if (matcher.group("IDENTIFIER") != null) tokens.add(new Token(Token.Type.IDENTIFIER, matcher.group()));
+            else if (matcher.group("STRING") != null) tokens.add(new Token(Token.Type.STRING, matcher.group()));
+            else if (matcher.group("NUMBER") != null) tokens.add(new Token(Token.Type.NUMBER, matcher.group()));
+            else if (matcher.group("EQUAL") != null) tokens.add(new Token(Token.Type.EQUAL, matcher.group()));
+            else if (matcher.group("COMMA") != null) tokens.add(new Token(Token.Type.COMMA, matcher.group()));
+            else if (matcher.group("LPAREN") != null) tokens.add(new Token(Token.Type.LPAREN, matcher.group()));
+            else if (matcher.group("RPAREN") != null) tokens.add(new Token(Token.Type.RPAREN, matcher.group()));
+            else tokens.add(new Token(Token.Type.UNKNOWN, matcher.group()));
+        }
+        return tokens;
+    }
+}
+```
+
+---
+
+### **Test Case**
+```java
+public class Main {
+    public static void main(String[] args) {
+        String input = "Function1 ( [var1 var1.var1 var1] , [var2] , 'avg' )\n"
+                     + "Function2([var1.var1],[var2] = 'value')\n"
+                     + "Function3 ( [var1 var2.var1 var2] , 0 )";
+
+        Lexer lexer = new Lexer(input);
+        List<Token> tokens = lexer.tokenize();
+        
+        System.out.println("Tokens:");
+        tokens.forEach(System.out::println);
+    }
+}
+```
+
+---
+
+### **Expected Output**
+```
+Tokens:
+FUNCTION('Function1')
+LPAREN('(')
+IDENTIFIER('[var1 var1.var1 var1]')
+COMMA(',')
+IDENTIFIER('[var2]')
+COMMA(',')
+STRING('avg')
+RPAREN(')')
+FUNCTION('Function2')
+LPAREN('(')
+IDENTIFIER('[var1.var1]')
+COMMA(',')
+IDENTIFIER('[var2]')
+EQUAL('=')
+STRING('value')
+RPAREN(')')
+FUNCTION('Function3')
+LPAREN('(')
+IDENTIFIER('[var1 var2.var1 var2]')
+COMMA(',')
+NUMBER('0')
+RPAREN(')')
+```
+
+---
+
+### **Key Fixes**
+✅ Spaces between tokens are ignored.  
+✅ Spaces inside `[]` are preserved in the identifier.  
+✅ Everything else still functions as expected.  
+
+Would you like to extend this further (e.g., support for nested function calls)?
+

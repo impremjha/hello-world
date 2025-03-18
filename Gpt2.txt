@@ -351,3 +351,157 @@ RPAREN(')')
 
 Would you like to extend this further (e.g., support for nested function calls)?
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Yes! Instead of storing the identifier type as a field, we can define separate token types for different identifier categories.  
+
+---
+
+### **Updated Token Class**
+```java
+class Token {
+    enum Type {
+        FUNCTION, TYPE1_IDENTIFIER, TYPE2_IDENTIFIER, TYPE3_IDENTIFIER, TYPE4_IDENTIFIER,
+        STRING, NUMBER, OPERATOR, LPAREN, RPAREN, COMMA, EQUAL, UNKNOWN
+    }
+
+    Type type;
+    String value;
+
+    Token(Type type, String value) {
+        this.type = type;
+        this.value = value;
+    }
+
+    @Override
+    public String toString() {
+        return type + "('" + value + "')";
+    }
+}
+```
+
+---
+
+### **Updated Lexer**
+```java
+import java.util.*;
+import java.util.regex.*;
+
+class Lexer {
+    private static final Pattern TOKEN_PATTERNS = Pattern.compile(
+            "(?<FUNCTION>[A-Za-z][A-Za-z0-9_]*)" +              // Function names
+            "|(?<TYPE1IDENTIFIER>\\[type1]~\\[.*?\\])" +       // Type1 Identifiers
+            "|(?<TYPE2IDENTIFIER>\\[type2]~\\[.*?\\])" +       // Type2 Identifiers
+            "|(?<TYPE3IDENTIFIER>\\[type3]~\\[.*?\\])" +       // Type3 Identifiers
+            "|(?<TYPE4IDENTIFIER>\\[type4]~\\[.*?\\])" +       // Type4 Identifiers
+            "|(?<STRING>'[^']*')" +                           // Strings like 'avg'
+            "|(?<NUMBER>\\d+(\\.\\d+)?)" +                    // Numbers (integers or decimals)
+            "|(?<EQUAL>=)" +                                  // Equal sign
+            "|(?<COMMA>,)" +                                  // Comma
+            "|(?<LPAREN>\\()" +                               // Left Parenthesis
+            "|(?<RPAREN>\\))"                                 // Right Parenthesis
+    );
+
+    private final Matcher matcher;
+
+    Lexer(String input) {
+        input = input.replaceAll("\\s+(?![^\\[]*\\])", ""); // Ignore spaces except inside []
+        matcher = TOKEN_PATTERNS.matcher(input);
+    }
+
+    List<Token> tokenize() {
+        List<Token> tokens = new ArrayList<>();
+        while (matcher.find()) {
+            if (matcher.group("FUNCTION") != null) {
+                tokens.add(new Token(Token.Type.FUNCTION, matcher.group()));
+            } else if (matcher.group("TYPE1IDENTIFIER") != null) {
+                tokens.add(new Token(Token.Type.TYPE1_IDENTIFIER, extractIdentifier(matcher.group())));
+            } else if (matcher.group("TYPE2IDENTIFIER") != null) {
+                tokens.add(new Token(Token.Type.TYPE2_IDENTIFIER, extractIdentifier(matcher.group())));
+            } else if (matcher.group("TYPE3IDENTIFIER") != null) {
+                tokens.add(new Token(Token.Type.TYPE3_IDENTIFIER, extractIdentifier(matcher.group())));
+            } else if (matcher.group("TYPE4IDENTIFIER") != null) {
+                tokens.add(new Token(Token.Type.TYPE4_IDENTIFIER, extractIdentifier(matcher.group())));
+            } else if (matcher.group("STRING") != null) {
+                tokens.add(new Token(Token.Type.STRING, matcher.group()));
+            } else if (matcher.group("NUMBER") != null) {
+                tokens.add(new Token(Token.Type.NUMBER, matcher.group()));
+            } else if (matcher.group("EQUAL") != null) {
+                tokens.add(new Token(Token.Type.EQUAL, matcher.group()));
+            } else if (matcher.group("COMMA") != null) {
+                tokens.add(new Token(Token.Type.COMMA, matcher.group()));
+            } else if (matcher.group("LPAREN") != null) {
+                tokens.add(new Token(Token.Type.LPAREN, matcher.group()));
+            } else if (matcher.group("RPAREN") != null) {
+                tokens.add(new Token(Token.Type.RPAREN, matcher.group()));
+            } else {
+                tokens.add(new Token(Token.Type.UNKNOWN, matcher.group()));
+            }
+        }
+        return tokens;
+    }
+
+    private String extractIdentifier(String fullIdentifier) {
+        return fullIdentifier.split("~")[1]; // Extract only the identifier part
+    }
+}
+```
+
+---
+
+### **Test Case**
+```java
+public class Main {
+    public static void main(String[] args) {
+        String input = "Function1 ( [type1]~[var1.var1] , [type2]~[var2.var2] , [type3]~[var3.var3] , 0 , 'avg' )";
+
+        Lexer lexer = new Lexer(input);
+        List<Token> tokens = lexer.tokenize();
+        
+        System.out.println("Tokens:");
+        tokens.forEach(System.out::println);
+    }
+}
+```
+
+---
+
+### **Expected Output**
+```
+Tokens:
+FUNCTION('Function1')
+LPAREN('(')
+TYPE1_IDENTIFIER('[var1.var1]')
+COMMA(',')
+TYPE2_IDENTIFIER('[var2.var2]')
+COMMA(',')
+TYPE3_IDENTIFIER('[var3.var3]')
+COMMA(',')
+NUMBER('0')
+COMMA(',')
+STRING('avg')
+RPAREN(')')
+```
+
+---
+
+### **Key Changes**
+✅ Identifiers now have **separate token types** (`TYPE1_IDENTIFIER`, `TYPE2_IDENTIFIER`, etc.).  
+✅ No need to store identifier types in a field—each type is a distinct token.  
+✅ Spaces between tokens are ignored, but spaces inside identifiers are preserved.  
+
+Would you like to define more identifier rules, such as restricting identifier names?
+
+

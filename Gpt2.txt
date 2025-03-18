@@ -505,3 +505,78 @@ RPAREN(')')
 Would you like to define more identifier rules, such as restricting identifier names?
 
 
+
+
+
+
+
+
+
+
+
+import java.util.List;
+
+class Parser {
+    private final List<Token> tokens;
+    private int position = 0;
+
+    Parser(List<Token> tokens) {
+        this.tokens = tokens;
+    }
+
+    void parse() {
+        while (position < tokens.size()) {
+            Token token = tokens.get(position);
+
+            if (token.type == Token.Type.FUNCTION) {
+                parseFunctionCall();
+            } else {
+                throw new RuntimeException("Unexpected token: " + token);
+            }
+        }
+    }
+
+    private void parseFunctionCall() {
+        Token functionToken = tokens.get(position++);
+        System.out.println("Parsed Function: " + functionToken.value);
+
+        expect(Token.Type.LPAREN);
+
+        while (position < tokens.size() && tokens.get(position).type != Token.Type.RPAREN) {
+            Token arg = tokens.get(position);
+
+            if (isIdentifier(arg)) {
+                System.out.println("  Argument (Identifier " + arg.type + "): " + arg.value);
+                position++;
+            } else if (arg.type == Token.Type.NUMBER || arg.type == Token.Type.STRING) {
+                System.out.println("  Argument (Literal): " + arg.value);
+                position++;
+            } else if (arg.type == Token.Type.COMMA) {
+                position++; // Skip commas
+            } else {
+                throw new RuntimeException("Unexpected argument: " + arg);
+            }
+        }
+
+        expect(Token.Type.RPAREN);
+    }
+
+    private boolean isIdentifier(Token token) {
+        return token.type == Token.Type.TYPE1_IDENTIFIER ||
+               token.type == Token.Type.TYPE2_IDENTIFIER ||
+               token.type == Token.Type.TYPE3_IDENTIFIER ||
+               token.type == Token.Type.TYPE4_IDENTIFIER;
+    }
+
+    private void expect(Token.Type expected) {
+        if (position < tokens.size() && tokens.get(position).type == expected) {
+            position++;
+        } else {
+            throw new RuntimeException("Expected " + expected + " but found " + (position < tokens.size() ? tokens.get(position) : "EOF"));
+        }
+    }
+}
+
+
+
+

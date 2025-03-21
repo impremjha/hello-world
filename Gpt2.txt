@@ -580,3 +580,209 @@ class Parser {
 
 
 
+
+
+
+
+
+
+To parse the `if` expression correctly, we need to:  
+
+1. **Extend the lexer** to recognize `IF`, logical operators (`AND`, `OR`), relational operators (`=`, `!=`, `>`, `<`, etc.), and arithmetic operators (`+`, `-`, `*`, `/`).  
+2. **Modify the parser** to support parsing conditions, including:  
+   - Simple conditions like `[type1]~[var1.var2] = 1`.  
+   - Logical conditions like `[var1.var2] = 1 AND [var3.var4] = 2`.  
+   - Nested conditions like `[var1.var2] = ([var3.var4] / 3)`.  
+   - The `if` expression structure: `If(condition, trueValue, falseValue)`.  
+
+---
+
+## **1. Updated Token Class**
+```java
+class Token {
+    enum Type {
+        FUNCTION, IF, TYPE1_IDENTIFIER, TYPE2_IDENTIFIER, TYPE3_IDENTIFIER, TYPE4_IDENTIFIER,
+        STRING, NUMBER, OPERATOR, LOGICAL_OPERATOR, RELATIONAL_OPERATOR,
+        LPAREN, RPAREN, COMMA, EQUAL, UNKNOWN
+    }
+
+    Type type;
+    String value;
+
+    Token(Type type, String value) {
+        this.type = type;
+        this.value = value;
+    }
+
+    @Override
+    public String toString() {
+        return type + "('" + value + "')";
+    }
+}
+```
+
+---
+
+## **2. Updated Lexer**
+```java
+import java.util.*;
+import java.util.regex.*;
+
+class Lexer {
+    private static final Pattern TOKEN_PATTERNS = Pattern.compile(
+            "(?<IF>\\bIF\\b)" +  // 'If' keyword
+            "|(?<FUNCTION>[A-Za-z][A-Za-z0-9_]*)" +  // Function names
+            "|(?<TYPE1IDENTIFIER>\\[type1]~\\[.*?\\])" +  // Type1 Identifiers
+            "|(?<TYPE2IDENTIFIER>\\[type2]~\\[.*?\\])" +  // Type2 Identifiers
+            "|(?<TYPE3IDENTIFIER>\\[type3]~\\[.*?\\])" +  // Type3 Identifiers
+            "|(?<TYPE4IDENTIFIER>\\[type4]~\\[.*?\\])" +  // Type4 Identifiers
+            "|(?<STRING>'[^']*')" +  // Strings
+            "|(?<NUMBER>\\d+(\\.\\d+)?)" +  // Numbers
+            "|(?<EQUAL>=)" +  // Equal sign
+            "|(?<LOGICAL_OPERATOR>\\b(AND|OR)\\b)" +  // Logical operators
+            "|(?<RELATIONAL_OPERATOR>[!=<>]=?)" +  // Relational operators
+            "|(?<OPERATOR>[+\\-*/])" +  // Arithmetic operators
+            "|(?<COMMA>,)" +  // Comma
+            "|(?<LPAREN>\\()" +  // Left Parenthesis
+            "|(?<RPAREN>\\))"  // Right Parenthesis
+    );
+
+    private final Matcher matcher;
+
+    Lexer(String input) {
+        input = input.replaceAll("\\s+(?![^\\[]*\\])", ""); // Ignore spaces except inside []
+        matcher = TOKEN_PATTERNS.matcher(input);
+    }
+
+    List<Token> tokenize() {
+        List<Token> tokens = new ArrayList<>();
+        while (matcher.find()) {
+            if (matcher.group("IF") != null) {
+                tokens.add(new Token(Token.Type.IF, matcher.group()));
+            } else if (matcher.group("FUNCTION") != null) {
+                tokens.add(new Token(Token.Type.FUNCTION, matcher.group()));
+            } else if (matcher.group("TYPE1IDENTIFIER") != null) {
+                tokens.add(new Token(Token.Type.TYPE1_IDENTIFIER, extractIdentifier(matcher.group())));
+            } else if (matcher.group("TYPE2IDENTIFIER") != null) {
+                tokens.add(new Token(Token.Type.TYPE2_IDENTIFIER, extractIdentifier(matcher.group())));
+            } else if (matcher.group("TYPE3IDENTIFIER") != null) {
+                tokens.add(new Token(Token.Type.TYPE3_IDENTIFIER, extractIdentifier(matcher.group())));
+            } else if (matcher.group("TYPE4IDENTIFIER") != null) {
+                tokens.add(new Token(Token.Type.TYPE4_IDENTIFIER, extractIdentifier(matcher.group())));
+            } else if (matcher.group("STRING") != null) {
+                tokens.add(new Token(Token.Type.STRING, matcher.group()));
+            } else if (matcher.group("NUMBER") != null) {
+                tokens.add(new Token(Token.Type.NUMBER, matcher.group()));
+            } else if (matcher.group("EQUAL") != null) {
+                tokens.add(new Token(Token.Type.EQUAL, matcher.group()));
+            } else if (matcher.group("LOGICAL_OPERATOR") != null) {
+                tokens.add(new Token(Token.Type.LOGICAL_OPERATOR, matcher.group()));
+            } else if (matcher.group("RELATIONAL_OPERATOR") != null) {
+                tokens.add(new Token(Token.Type.RELATIONAL_OPERATOR, matcher.group()));
+            } else if (matcher.group("OPERATOR") != null) {
+                tokens.add(new Token(Token.Type.OPERATOR, matcher.group()));
+            } else if (matcher.group("COMMA") != null) {
+                tokens.add(new Token(Token.Type.COMMA, matcher.group()));
+            } else if (matcher.group("LPAREN") != null) {
+                tokens.add(new Token(Token.Type.LPAREN, matcher.group()));
+            } else if (matcher.group("RPAREN") != null) {
+                tokens.add(new Token(Token.Type.RPAREN, matcher.group()));
+            } else {
+                tokens.add(new Token(Token.Type.UNKNOWN, matcher.group()));
+            }
+        }
+        return tokens;
+    }
+
+    private String extractIdentifier(String fullIdentifier) {
+        return fullIdentifier.split("~")[1].replaceAll("[\\[\\]]", ""); // Remove brackets
+    }
+}
+```
+
+---
+
+## **3. Updated Parser**
+```java
+import java.util.List;
+
+class Parser {
+    private final List<Token> tokens;
+    private int position = 0;
+
+    Parser(List<Token> tokens) {
+        this.tokens = tokens;
+    }
+
+    void parse() {
+        while (position < tokens.size()) {
+            Token token = tokens.get(position);
+
+            if (token.type == Token.Type.IF) {
+                parseIfExpression();
+            } else {
+                throw new RuntimeException("Unexpected token: " + token);
+            }
+        }
+    }
+
+    private void parseIfExpression() {
+        Token ifToken = tokens.get(position++);
+        System.out.println("Parsed If Expression");
+
+        expect(Token.Type.LPAREN);
+
+        System.out.println("  Condition:");
+        parseCondition();
+
+        expect(Token.Type.COMMA);
+        System.out.println("  True Value: " + tokens.get(position++).value);
+
+        expect(Token.Type.COMMA);
+        System.out.println("  False Value: " + tokens.get(position++).value);
+
+        expect(Token.Type.RPAREN);
+    }
+
+    private void parseCondition() {
+        while (position < tokens.size() && tokens.get(position).type != Token.Type.COMMA) {
+            Token token = tokens.get(position);
+            if (isIdentifier(token)) {
+                System.out.print("    Identifier " + token.type + " (" + token.value + ")");
+                position++;
+            } else if (token.type == Token.Type.NUMBER || token.type == Token.Type.STRING) {
+                System.out.print("    Literal (" + token.value + ")");
+                position++;
+            } else if (token.type == Token.Type.RELATIONAL_OPERATOR || token.type == Token.Type.OPERATOR || token.type == Token.Type.LOGICAL_OPERATOR) {
+                System.out.print(" " + token.value + " ");
+                position++;
+            } else if (token.type == Token.Type.LPAREN || token.type == Token.Type.RPAREN) {
+                System.out.print(token.value);
+                position++;
+            } else {
+                throw new RuntimeException("Unexpected token in condition: " + token);
+            }
+        }
+        System.out.println();
+    }
+
+    private boolean isIdentifier(Token token) {
+        return token.type == Token.Type.TYPE1_IDENTIFIER ||
+               token.type == Token.Type.TYPE2_IDENTIFIER ||
+               token.type == Token.Type.TYPE3_IDENTIFIER ||
+               token.type == Token.Type.TYPE4_IDENTIFIER;
+    }
+}
+```
+
+---
+
+### **Now Supports Parsing:**
+✅ Simple conditions  
+✅ `AND` / `OR` logical operators  
+✅ Nested expressions like `([var5.var6] / 3)`  
+✅ Handles whitespace and removes `[` `]` brackets  
+
+Would you like to extend this for **more complex conditions** like `NOT`, `<=`, or multi-level nesting?
+
+

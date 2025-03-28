@@ -3,31 +3,31 @@ package com.crisil.cubix.sql.engine.query.pivot;
 import java.util.Arrays;
 import java.util.List;
 
-public record PivotGrandTotalRow(String[] type, String[] filteredType, String[] values) {
+public record PivotGrandTotalRow(String type, String filteredType, String[] values) {
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true; // Same reference
         if (o == null || getClass() != o.getClass()) return false; // Null or different class
         PivotGrandTotalRow that = (PivotGrandTotalRow) o;
-        return Arrays.equals(type, that.type) &&
-               Arrays.equals(filteredType, that.filteredType) &&
-               Arrays.equals(values, that.values); // Compare array contents
+        return type.equals(that.type) &&
+               filteredType.equals(that.filteredType) &&
+               Arrays.equals(values, that.values); // Compare array contents for values
     }
 
     @Override
     public int hashCode() {
-        int result = Arrays.hashCode(type);
-        result = 31 * result + Arrays.hashCode(filteredType);
-        result = 31 * result + Arrays.hashCode(values); // Include all fields in hashCode
+        int result = type.hashCode();
+        result = 31 * result + filteredType.hashCode();
+        result = 31 * result + Arrays.hashCode(values); // Include values array in hashCode
         return result;
     }
 
     @Override
     public String toString() {
         return "PivotGrandTotalRow{" +
-               "type=" + Arrays.toString(type) +
-               ", filteredType=" + Arrays.toString(filteredType) +
+               "type='" + type + '\'' +
+               ", filteredType='" + filteredType + '\'' +
                ", values=" + Arrays.toString(values) +
                '}';
     }
